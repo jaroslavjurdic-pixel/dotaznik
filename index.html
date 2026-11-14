@@ -1,0 +1,559 @@
+<!doctype html>
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Dotazník pro studenty</title>
+<style>
+  :root {
+    --bg: #f5f6f8; --card: #ffffff; --text: #1d2330; --muted: #5d6677;
+    --border: #d9dde5; --accent: #2457c5; --accent-soft: #e8eefb;
+    --error: #b42318; --ok: #1f7a3d;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14171d; --card: #1d2129; --text: #e7eaf0; --muted: #9aa3b5;
+      --border: #343a46; --accent: #7aa2ff; --accent-soft: #24304a;
+      --error: #ff8a80; --ok: #6fd08c;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  main { max-width: 720px; margin: 0 auto; padding: 24px 16px 64px; }
+  h1 { font-size: 1.6rem; margin: 0 0 8px; }
+  h2 { font-size: 1.2rem; margin: 0 0 16px; }
+  p { margin: 0 0 12px; }
+  .muted { color: var(--muted); font-size: .95rem; }
+  .card {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 12px; padding: 20px; margin-bottom: 16px;
+  }
+  .progress { height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; margin: 16px 0 20px; }
+  .progress > div { height: 100%; width: 0; background: var(--accent); transition: width .2s; }
+  .q { padding: 16px 0; border-top: 1px solid var(--border); }
+  .q:first-of-type { border-top: 0; padding-top: 0; }
+  .q-title { font-weight: 600; margin-bottom: 4px; }
+  .q-title .req { color: var(--error); margin-left: 2px; }
+  .q-help { color: var(--muted); font-size: .9rem; margin-bottom: 8px; }
+  .opt { display: flex; align-items: flex-start; gap: 10px; padding: 8px 10px; border-radius: 8px; cursor: pointer; }
+  .opt:hover { background: var(--accent-soft); }
+  .opt input { margin-top: 4px; accent-color: var(--accent); width: 18px; height: 18px; flex: none; }
+  .other-input { margin: 4px 0 0 38px; width: calc(100% - 38px); }
+  input[type=text], textarea {
+    width: 100%; padding: 10px 12px; font: inherit; color: var(--text);
+    background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+  }
+  textarea { min-height: 96px; resize: vertical; }
+  .scale { display: flex; gap: 6px; flex-wrap: wrap; }
+  .scale label {
+    flex: 1 1 0; min-width: 44px; text-align: center; padding: 10px 4px;
+    border: 1px solid var(--border); border-radius: 8px; cursor: pointer;
+  }
+  .scale input { position: absolute; opacity: 0; pointer-events: none; }
+  .scale label:has(input:checked) { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .scale label:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .scale-ends { display: flex; justify-content: space-between; color: var(--muted); font-size: .85rem; margin-top: 4px; gap: 12px; }
+  .matrix-row { padding: 10px 0; border-top: 1px dashed var(--border); }
+  .matrix-row:first-child { border-top: 0; }
+  .matrix-row .stmt { margin-bottom: 6px; }
+  .matrix-row .scale label { font-size: .85rem; padding: 8px 2px; }
+  @media (max-width: 600px) {
+    .card { padding: 16px; }
+    .scale { gap: 4px; }
+    .scale label { min-width: 0; padding: 10px 0; }
+    .matrix-row .scale { flex-direction: column; }
+    .matrix-row .scale label { text-align: left; padding: 10px 12px; font-size: .95rem; }
+  }
+  .info-box { padding: 14px 16px; border-left: 4px solid var(--accent); background: var(--accent-soft); border-radius: 8px; margin: 4px 0 8px; font-size: .95rem; }
+  .info-box a { color: var(--accent); }
+  .matrix-row.numeric .scale { flex-direction: row !important; }
+  .matrix-row.numeric .scale label { text-align: center !important; padding: 10px 0 !important; }
+  .err { color: var(--error); font-size: .9rem; margin-top: 6px; display: none; }
+  .q.invalid .err { display: block; }
+  .q.invalid .q-title { color: var(--error); }
+  .actions { display: flex; justify-content: space-between; gap: 12px; margin-top: 20px; }
+  button {
+    font: inherit; font-weight: 600; padding: 12px 22px; border-radius: 8px;
+    border: 1px solid var(--accent); background: var(--accent); color: #fff; cursor: pointer;
+  }
+  button.secondary { background: transparent; color: var(--accent); }
+  button:disabled { opacity: .6; cursor: wait; }
+  .hidden { display: none !important; }
+  .notice { padding: 12px 14px; border-radius: 8px; background: var(--accent-soft); margin-bottom: 12px; }
+  .notice.error { background: transparent; border: 1px solid var(--error); color: var(--error); }
+</style>
+</head>
+<body>
+<main>
+  <div id="app"></div>
+</main>
+
+<script>
+/* =====================================================================
+   NASTAVENÍ – upravte podle sebe
+   ===================================================================== */
+const CONFIG = {
+  // URL webové aplikace Google Apps Script (viz NAVOD.md, krok 2).
+  // Pokud je prázdné, dotazník běží v ZKUŠEBNÍM režimu a nic se neodesílá.
+  ENDPOINT_URL: "",
+
+  // Automatické uzavření je vypnuté (null). Pro uzavření k datu zadejte např.
+  // "2027-06-30T23:59:59+02:00" a totéž datum nastavte i v Code.gs.
+  CLOSE_AT: null,
+
+  // Verze dotazníku – změňte, pokud během sběru upravíte otázky.
+  VERSION: "v1",
+
+  TITLE: "Vnímání vlastního těla a zkušenosti s body shamingem",
+  INTRO: [
+    "Vážené studentky, vážení studenti,",
+    "jmenuji se Bc. Veronika Jurdičová a jsem studentkou magisterského studia oboru učitelství odborných předmětů pro zdravotnické školy na Pedagogické fakultě Univerzity Palackého v Olomouci. V rámci své diplomové práce realizuji výzkumné šetření, jehož cílem je analyzovat vnímání vlastního těla a zkušenosti s body shamingem u studentů středních zdravotnických škol.",
+    "Vaše účast v tomto výzkumu je zcela dobrovolná. Všechny získané odpovědi jsou <strong>zcela anonymní</strong>. Sesbíraná data budou sloužit výhradně pro účely této diplomové práce a nebudou poskytnuty třetím stranám. Dotazník můžete kdykoli zavřít, aniž by se cokoli uložilo.",
+  ],
+  CONSENT: "Souhlasím s účastí ve výzkumu a s použitím anonymizovaných dat pro účely diplomové práce.",
+  THANKS: "Děkuji za vyplnění! Vaše odpovědi byly uloženy. Okno nyní můžete zavřít.",
+};
+
+/* Text s kontakty na pomoc – zobrazí se v dotazníku i na závěrečné stránce. */
+const SUPPORT_HTML = `<strong>Nemusíte na to být sami.</strong> Pokud procházíte náročným obdobím nebo se Vás tato témata osobně dotýkají, můžete kdykoliv vyhledat anonymní a bezplatnou podporu. Obrátit se můžete přímo na <strong>školního psychologa či výchovného poradce</strong> na Vaší škole, využít nonstop <strong>Linku bezpečí</strong> na telefonu <a href="tel:116111">116&nbsp;111</a> (případně online chat na <a href="https://www.linkabezpeci.cz" target="_blank" rel="noopener">linkabezpeci.cz</a>), nebo kontaktovat <strong>Linku první psychické pomoci</strong> na čísle <a href="tel:116123">116&nbsp;123</a>. Při problémech s vnímáním vlastního těla či poruchách příjmu potravy nabízí odbornou pomoc také <strong>Centrum Anabell</strong> (<a href="https://www.anabell.cz" target="_blank" rel="noopener">anabell.cz</a>).`;
+
+/* =====================================================================
+   OTÁZKY (podle dotaznik_vzor.docx)
+   Typy:
+     single   – jedna odpověď (options, volitelně other: true)
+     multi    – více odpovědí (options, other, max, exclusive: možnosti,
+                které zruší ostatní – např. „Nechci odpovídat“)
+     scale    – škála 1..N (min, max, minLabel, maxLabel)
+     matrix   – více výroků se stejnou škálou (rows, columns;
+                s minLabel/maxLabel se zobrazí jako čísla 1..N)
+     text     – krátká textová odpověď
+     textarea – delší textová odpověď
+     info     – jen informační text (html), neukládá se
+   Společné: id (= název sloupce v tabulce), title, help, required,
+             showIf: odpovedi => true/false (podmíněné zobrazení)
+   ===================================================================== */
+const DULEZITOST = { columns: ["1", "2", "3", "4", "5"], minLabel: "1 = zcela nepodstatné", maxLabel: "5 = extrémně důležité" };
+const bodyShamingAno = a => a.bs_zkusenost === "Ano, jednou nebo několikrát" || a.bs_zkusenost === "Ano, opakovaně";
+
+const SECTIONS = [
+  {
+    title: "Základní údaje",
+    questions: [
+      { id: "pohlavi", type: "single", title: "Jste?", required: true,
+        options: ["Muž", "Žena", "Nechci uvádět"], other: true },
+      { id: "vek", type: "single", title: "Jaký je Váš věk?", required: true,
+        options: ["15–16 let", "17–18 let", "19–20 let", "21 let a více"] },
+      { id: "obor", type: "text", title: "Jaký je Váš aktuálně studovaný obor?", required: true },
+      { id: "bydliste", type: "single", title: "Jaké je Vaše aktuální místo bydliště?", required: true,
+        options: ["Velké město (nad 100 000 obyvatel)", "Středně velké město (20 000–100 000 obyvatel)",
+                  "Malé město (3 000–20 000 obyvatel)", "Vesnice / obec (do 3 000 obyvatel)"] },
+    ],
+  },
+  {
+    title: "Vztah k vlastnímu tělu",
+    questions: [
+      { id: "bas2", type: "matrix", required: true,
+        title: "Přečtěte si prosím tato tvrzení a uveďte, jak často si myslíte nebo zažíváte následující věci.",
+        columns: ["Nikdy", "Málokdy", "Občas", "Často", "Téměř vždy"],
+        rows: [
+          { id: "bas2_01", text: "Vážím si svého těla." },
+          { id: "bas2_02", text: "Cítím se ohledně svého těla dobře." },
+          { id: "bas2_03", text: "Myslím, že mé tělo má alespoň nějaké dobré vlastnosti." },
+          { id: "bas2_04", text: "Mám ke svému tělu pozitivní postoj." },
+          { id: "bas2_05", text: "Věnuji pozornost tomu, co mé tělo potřebuje." },
+          { id: "bas2_06", text: "Mám své tělo rád/a." },
+          { id: "bas2_07", text: "Cením si jedinečných vlastností, které mé tělo má." },
+          { id: "bas2_08", text: "Na mém chování jde vidět, že mám dobrý vztah ke svému tělu." },
+          { id: "bas2_09", text: "Ve svém těle se cítím dobře." },
+          { id: "bas2_10", text: "Myslím, že jsem hezký/á, i když vypadám jinak než atraktivní lidé na internetu (např. modelové/modelky, herci/herečky)." },
+        ] },
+    ],
+  },
+  {
+    title: "Ideály krásy a sociální sítě",
+    questions: [
+      { id: "ideal_zena", type: "matrix", required: true, ...DULEZITOST,
+        title: "Jak podle Vás současná společnost vnímá ideál ženské krásy?",
+        help: "Označte na škále od 1 do 5, jak moc jsou pro tento ideál důležité následující rysy (1 = zcela nepodstatné, 5 = extrémně důležité).",
+        rows: [
+          { id: "ideal_zena_stihla", text: "Velmi štíhlá postava" },
+          { id: "ideal_zena_sportovni", text: "Tělo s pevnými svaly / sportovní postava" },
+          { id: "ideal_zena_tvary", text: "Výrazné ženské tvary (např. útlý pas, plnější boky/prsa)" },
+          { id: "ideal_zena_plet", text: "Dokonalá bezchybná pleť a rysy obličeje" },
+          { id: "ideal_zena_moda", text: "Módní oblečení a upravený vzhled" },
+        ] },
+      { id: "ideal_muz", type: "matrix", required: true, ...DULEZITOST,
+        title: "Jak podle Vás současná společnost vnímá ideál mužské krásy?",
+        help: "Označte na škále od 1 do 5, jak moc jsou důležité následující rysy (1 = zcela nepodstatné, 5 = extrémně důležité).",
+        rows: [
+          { id: "ideal_muz_svaly", text: "Svalnatá, vypracovaná postava (obliba posilování)" },
+          { id: "ideal_muz_ramena", text: "Široká ramena a vyrýsovaný hrudník" },
+          { id: "ideal_muz_vyska", text: "Vysoká postava" },
+          { id: "ideal_muz_tuk", text: "Nízké procento tělesného tuku / štíhlost" },
+          { id: "ideal_muz_styl", text: "Udržovaný vzhled a styl" },
+        ] },
+      { id: "socialni_site_hodiny", type: "single", required: true,
+        title: "Kolik hodin průměrně trávíte denně na sociálních sítích?",
+        options: ["0–1 hodinu", "2–3 hodiny", "4–6 hodin", "7 hodin a více"] },
+    ],
+  },
+  {
+    title: "Zkušenosti s body shamingem",
+    questions: [
+      { id: "info_bs", type: "info",
+        html: "<strong>Vysvětlivka:</strong> Pod pojmem <em>body shaming</em> rozumíme jakékoli ponižování, posmívání, zesměšňování, kritizování nebo nevyžádané poznámky zaměřené na vzhled člověka. Může jít například o poznámky týkající se tělesné hmotnosti, výšky, tvaru postavy, obličeje, oblečení, barvy pleti či jiných tělesných charakteristik." },
+      { id: "bs_zkusenost", type: "single", required: true,
+        title: "Setkal/a jste se někdy osobně s posmíváním, kritikou nebo nevhodnými poznámkami na Váš vzhled (tzv. body shamingem)?",
+        options: ["Ano, jednou nebo několikrát", "Ano, opakovaně", "Ne, nikdy", "Nejsem si jistý/á"] },
+      { id: "bs_oblasti", type: "multi", required: true, other: true, showIf: bodyShamingAno,
+        title: "V jakých oblastech jste se s tímto chováním nejčastěji setkal/a?",
+        help: "Můžete označit více odpovědí.",
+        options: ["Poznámky k tělesné hmotnosti nebo tvaru postavy", "Komentáře k obličeji, problémové pleti či barvě pleti",
+                  "Poznámky k výšce", "Kritika stylu oblékání nebo úpravy zevnějšku"] },
+      { id: "bs_prostredi", type: "matrix", required: true, showIf: bodyShamingAno,
+        title: "Jak často se s body shamingem setkáváte v následujících prostředích?",
+        columns: ["Nikdy", "Zřídka", "Občas", "Často", "Velmi často"],
+        rows: [
+          { id: "bs_prostredi_internet", text: "Na sociálních sítích / na internetu" },
+          { id: "bs_prostredi_spoluzaci", text: "Ve škole od spolužáků" },
+          { id: "bs_prostredi_vyucujici", text: "Ve škole od vyučujících / vyučujících na praxi" },
+          { id: "bs_prostredi_rodina", text: "V rodině / od příbuzných" },
+          { id: "bs_prostredi_pratele", text: "Mezi přáteli / ve volném čase" },
+        ] },
+      { id: "bs_site", type: "multi", required: true, other: true,
+        showIf: a => bodyShamingAno(a) && Number(a.bs_prostredi_internet) > 1,
+        title: "Na kterých sociálních sítích jste se s body shamingem nejčastěji setkal/a?",
+        help: "Můžete označit více odpovědí.",
+        options: ["YouTube", "Facebook", "Instagram", "Snapchat", "TikTok"] },
+      { id: "bs_pocity", type: "multi", required: true, other: true, showIf: bodyShamingAno,
+        title: "Pokud jste byl/a terčem posměchu, jaké pocity nebo dopady to ve Vás zanechalo?",
+        help: "Můžete označit více odpovědí.",
+        options: ["Pokles sebevědomí a nejistota", "Strach z hodnocení druhých, strach chodit ven/do školy",
+                  "Pocity smutku, beznaděje, depresivní nálady", "Vztek, frustrace",
+                  "Nespokojenost se vzhledem, stud za vlastní tělo", "Žádné zásadní dopady to na mě nemělo", "Nechci odpovídat"],
+        exclusive: ["Žádné zásadní dopady to na mě nemělo", "Nechci odpovídat"] },
+      { id: "bs_dopady", type: "multi", required: true, other: true, showIf: bodyShamingAno,
+        title: "Zanechalo toto období negativní dopad na Vaše zdraví nebo chování?",
+        help: "Můžete označit více odpovědí.",
+        options: ["Problémy se spánkem, chronická únava", "Myšlenky na sebepoškozování nebo pokusy o něj",
+                  "Užívání návykových látek (alkohol, cigarety, e-cigarety, jiné látky) jako únik před stresem",
+                  "Vyhledání odborné pomoci (psycholog, psychiatr) / užívání předepsané medikamentózní léčby",
+                  "Ne, nic z toho jsem nezaznamenal/a", "Nechci odpovídat"],
+        exclusive: ["Ne, nic z toho jsem nezaznamenal/a", "Nechci odpovídat"] },
+    ],
+  },
+  {
+    title: "Stravování, škola a odborná praxe",
+    questions: [
+      { id: "info_pomoc", type: "info", html: SUPPORT_HTML },
+      { id: "strava", type: "multi", required: true,
+        title: "Zaznamenal/a jste u sebe někdy v souvislosti s vnímáním vlastního těla potřebu uchýlit se k následujícím stravovacím opatřením nebo chování?",
+        help: "Můžete označit více odpovědí.",
+        options: ["Držení diet, výrazná stravovací omezení nebo hladovění", "Přejídání s následným vyvoláváním zvracení",
+                  "Užívání léků nebo jiných prostředků za účelem kontroly hmotnosti", "Přejídání se při stresu",
+                  "Enormní zvýšení fyzické námahy a cvičení s úpravou stravování",
+                  "Ne, nic z toho jsem u sebe nezaznamenal/a", "Nechci odpovídat"],
+        exclusive: ["Ne, nic z toho jsem u sebe nezaznamenal/a", "Nechci odpovídat"] },
+      { id: "skola_tema", type: "single", required: true,
+        title: "Setkal/a jste se s tématem body shamingu, vnímání vlastního těla nebo poruch příjmu potravy v rámci výuky či jiných školních aktivit na Vaší střední škole?",
+        options: ["Ano, přímo v běžné výuce (v rámci vyučovacích předmětů)", "Ano, v rámci preventivního programu / besedy / přednášky",
+                  "Ne, na toto téma jsme ve škole nemluvili", "Nevím"] },
+      { id: "uniforma", type: "single", required: true, other: true,
+        title: "Máte pocit, že povinné nošení uniforem na odborné praxi v nemocničních zařízeních ovlivňuje to, jak vnímáte své vlastní tělo?",
+        options: ["Ano, spíše negativně (uniforma je nepohodlná, zvýrazňuje nedokonalosti, cítím tlak na vzhled)",
+                  "Ano, spíše pozitivně (uniforma zakrývá nedostatky, pomáhá mi neřešit oblečení, vede k přijetí těla)",
+                  "Ne, nemá to na vnímání mého těla žádný vliv", "Nevím"] },
+      { id: "praxe", type: "single", required: true, other: true,
+        title: "Máte pocit, že samotný výkon odborné praxe v nemocničním prostředí (kontakt s pacienty, fyzická zátěž, prostředí) ovlivňuje to, jak vnímáte své vlastní tělo?",
+        options: ["Ano, spíše negativně (např. pociťuji větší tlak na fyzický vzhled, srovnávání se, stud)",
+                  "Ano, spíše pozitivně (např. více si vážím zdraví a funkčnosti svého těla, méně řeším vzhled)",
+                  "Ne, nemá to na vnímání mého těla žádný vliv", "Nevím"] },
+      { id: "prevence_zajem", type: "single", required: true,
+        title: "Uvítal/a byste v rámci výuky na Vaší škole více informací a preventivních aktivit zaměřených na body shaming a podporu duševního zdraví?",
+        options: ["Ano, určitě", "Spíše ano", "Ne, není to potřeba", "Nevím"] },
+    ],
+  },
+];
+
+/* =====================================================================
+   LOGIKA – není třeba upravovat
+   ===================================================================== */
+const app = document.getElementById("app");
+const answers = {};
+let step = -1; // -1 = úvod
+const STORAGE_KEY = "dotaznik_odeslano_" + CONFIG.VERSION;
+
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const visible = q => !q.showIf || q.showIf(answers);
+function safeGet(k) { try { return localStorage.getItem(k); } catch { return null; } }
+function safeSet(k, v) { try { localStorage.setItem(k, v); } catch {} }
+function uuid() {
+  if (crypto.randomUUID) return crypto.randomUUID();
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, c => {
+    const r = Math.random() * 16 | 0; return (c === "x" ? r : (r & 3 | 8)).toString(16);
+  });
+}
+
+function render() {
+  if (CONFIG.CLOSE_AT && new Date() > new Date(CONFIG.CLOSE_AT)) {
+    app.innerHTML = `<div class="card"><h1>${esc(CONFIG.TITLE)}</h1><p>Sběr odpovědí byl ukončen. Děkuji za zájem.</p></div>`;
+    return;
+  }
+  if (step === -1) return renderIntro();
+  if (step >= SECTIONS.length) return;
+  renderSection();
+}
+
+function renderIntro() {
+  const already = safeGet(STORAGE_KEY);
+  app.innerHTML = `
+    <div class="card">
+      <h1>${esc(CONFIG.TITLE)}</h1>
+      ${!CONFIG.ENDPOINT_URL ? `<div class="notice error">Zkušební režim: odpovědi se nikam neodesílají (není nastaveno ENDPOINT_URL).</div>` : ""}
+      ${already ? `<div class="notice">Z tohoto zařízení už byl dotazník odeslán. Pokud ho vyplňuje někdo jiný, můžete pokračovat.</div>` : ""}
+      ${CONFIG.INTRO.map(p => `<p>${p}</p>`).join("")}
+      <label class="opt" style="margin-top:12px"><input type="checkbox" id="consent"><span>${esc(CONFIG.CONSENT)}</span></label>
+      <div class="actions"><span></span><button id="start" disabled>Začít vyplňovat</button></div>
+    </div>`;
+  const cb = document.getElementById("consent"), btn = document.getElementById("start");
+  cb.onchange = () => btn.disabled = !cb.checked;
+  btn.onclick = () => { step = 0; render(); window.scrollTo(0, 0); };
+}
+
+function renderSection() {
+  const sec = SECTIONS[step];
+  const pct = Math.round((step / SECTIONS.length) * 100);
+  app.innerHTML = `
+    <div class="muted">Část ${step + 1} z ${SECTIONS.length}</div>
+    <div class="progress"><div style="width:${pct}%"></div></div>
+    <form class="card" id="form" novalidate>
+      <h2>${esc(sec.title)}</h2>
+      <div id="questions"></div>
+      <div id="submit-error" class="notice error hidden"></div>
+      <div class="actions">
+        ${step > 0 ? `<button type="button" class="secondary" id="back">Zpět</button>` : "<span></span>"}
+        <button type="submit" id="next">${step === SECTIONS.length - 1 ? "Odeslat" : "Pokračovat"}</button>
+      </div>
+    </form>`;
+  drawQuestions();
+  const form = document.getElementById("form");
+  form.addEventListener("input", onChange);
+  form.addEventListener("change", onChange);
+  const back = document.getElementById("back");
+  if (back) back.onclick = () => { step--; render(); window.scrollTo(0, 0); };
+  form.onsubmit = e => { e.preventDefault(); next(); };
+}
+
+function drawQuestions() {
+  const box = document.getElementById("questions");
+  box.innerHTML = SECTIONS[step].questions.filter(visible).map(qHtml).join("");
+}
+
+function qHtml(q) {
+  if (q.type === "info") return `<div class="q" data-q="${q.id}"><div class="info-box">${q.html}</div></div>`;
+  const req = q.required ? `<span class="req" aria-hidden="true">*</span>` : "";
+  let body = "";
+  const v = answers[q.id];
+  if (q.type === "single" || q.type === "multi") {
+    const t = q.type === "single" ? "radio" : "checkbox";
+    const sel = Array.isArray(v) ? v : (v != null ? [v] : []);
+    body = q.options.map(o => `
+      <label class="opt"><input type="${t}" name="${q.id}" value="${esc(o)}" ${sel.includes(o) ? "checked" : ""}><span>${esc(o)}</span></label>`).join("");
+    if (q.other) {
+      const oc = sel.includes("__other");
+      body += `<label class="opt"><input type="${t}" name="${q.id}" value="__other" ${oc ? "checked" : ""}><span>Jiné:</span></label>
+        <input type="text" class="other-input" data-other="${q.id}" value="${esc(answers[q.id + "_jine"] || "")}" ${oc ? "" : "disabled"} maxlength="200" aria-label="Jiné – upřesněte">`;
+    }
+  } else if (q.type === "scale") {
+    let opts = "";
+    for (let i = q.min; i <= q.max; i++) opts += `<label><input type="radio" name="${q.id}" value="${i}" ${String(v) === String(i) ? "checked" : ""}>${i}</label>`;
+    body = `<div class="scale" role="radiogroup">${opts}</div>
+      <div class="scale-ends"><span>${esc(q.minLabel || "")}</span><span>${esc(q.maxLabel || "")}</span></div>`;
+  } else if (q.type === "matrix") {
+    const numeric = !!(q.minLabel || q.maxLabel);
+    body = q.rows.map(r => `
+      <div class="matrix-row${numeric ? " numeric" : ""}" data-row="${r.id}">
+        <div class="stmt">${esc(r.text)}</div>
+        <div class="scale" role="radiogroup" aria-label="${esc(r.text)}">
+          ${q.columns.map((c, i) => `<label title="${esc(c)}"><input type="radio" name="${r.id}" value="${i + 1}" ${String(answers[r.id]) === String(i + 1) ? "checked" : ""}>${esc(c)}</label>`).join("")}
+        </div>
+        ${numeric ? `<div class="scale-ends"><span>${esc(q.minLabel || "")}</span><span>${esc(q.maxLabel || "")}</span></div>` : ""}
+      </div>`).join("");
+  } else if (q.type === "text") {
+    body = `<input type="text" name="${q.id}" value="${esc(v || "")}" maxlength="300">`;
+  } else if (q.type === "textarea") {
+    body = `<textarea name="${q.id}" maxlength="3000">${esc(v || "")}</textarea>`;
+  }
+  return `<fieldset class="q" data-q="${q.id}" style="border:0;margin:0;min-width:0">
+    <legend class="q-title" style="padding:0">${esc(q.title)}${req}</legend>
+    ${q.help ? `<div class="q-help">${esc(q.help)}</div>` : ""}
+    ${body}
+    <div class="err" role="alert"></div>
+  </fieldset>`;
+}
+
+function onChange(e) {
+  const el = e.target;
+  if (el.dataset.other) { answers[el.dataset.other + "_jine"] = el.value.trim(); return; }
+  if (!el.name) return;
+  const q = findQ(el.name);
+  if (el.type === "checkbox") {
+    if (q && q.exclusive && el.checked) {
+      // „Nechci odpovídat“ / „Nic z toho“ zruší ostatní volby a naopak
+      const excl = q.exclusive.includes(el.value);
+      document.querySelectorAll(`input[name="${el.name}"]:checked`).forEach(i => {
+        if (i !== el && (excl || q.exclusive.includes(i.value))) i.checked = false;
+      });
+    }
+    const vals = [...document.querySelectorAll(`input[name="${el.name}"]:checked`)].map(i => i.value);
+    if (q && q.max && vals.length > q.max) { el.checked = false; return; }
+    answers[el.name] = vals;
+  } else {
+    answers[el.name] = el.type === "radio" ? el.value : el.value.trim();
+  }
+  if (q && q.other) {
+    const sel = [].concat(answers[q.id] || []);
+    const inp = document.querySelector(`[data-other="${q.id}"]`);
+    if (inp) { inp.disabled = !sel.includes("__other"); if (!inp.disabled && e.type === "change" && el.value === "__other") inp.focus(); }
+  }
+  const fs = el.closest(".q"); if (fs) fs.classList.remove("invalid");
+  // přepočítat podmíněné otázky, pokud se změnila odpověď, na které něco závisí
+  if (e.type === "change" && (el.type === "radio" || el.type === "checkbox")) redrawIfNeeded();
+}
+function redrawIfNeeded() {
+  const now = SECTIONS[step].questions.filter(visible).map(x => x.id).join();
+  const shown = [...document.querySelectorAll("#questions .q")].map(f => f.dataset.q).join();
+  if (now !== shown) drawQuestions();
+}
+
+function findQ(name) {
+  for (const s of SECTIONS) for (const q of s.questions) {
+    if (q.id === name) return q;
+    if (q.rows && q.rows.some(r => r.id === name)) return q;
+  }
+  return null;
+}
+
+function validate() {
+  let firstBad = null;
+  for (const q of SECTIONS[step].questions.filter(visible)) {
+    if (q.type === "info") continue;
+    let msg = "";
+    const v = answers[q.id];
+    if (q.type === "matrix") {
+      const missing = q.rows.filter(r => !answers[r.id]);
+      if (q.required && missing.length) msg = `Odpovězte prosím na všechny výroky (chybí ${missing.length}).`;
+    } else if (q.required && (v == null || v === "" || (Array.isArray(v) && !v.length))) {
+      msg = "Tato otázka je povinná.";
+    }
+    if (!msg && q.other && [].concat(v || []).includes("__other") && !answers[q.id + "_jine"]) {
+      msg = "Upřesněte prosím možnost „Jiné“.";
+    }
+    const fs = document.querySelector(`.q[data-q="${q.id}"]`);
+    if (fs) {
+      fs.classList.toggle("invalid", !!msg);
+      fs.querySelector(".err").textContent = msg;
+      if (msg && !firstBad) firstBad = fs;
+    }
+  }
+  if (firstBad) firstBad.scrollIntoView({ behavior: "smooth", block: "center" });
+  return !firstBad;
+}
+
+function next() {
+  if (!validate()) return;
+  if (step < SECTIONS.length - 1) { step++; render(); window.scrollTo(0, 0); return; }
+  submit();
+}
+
+/** Sestaví jeden řádek: sloupce v pevném pořadí podle definice otázek. */
+function buildRecord() {
+  const rec = {
+    id: SUBMISSION_ID,
+    verze: CONFIG.VERSION,
+    doba_vyplnovani_s: Math.round((Date.now() - START) / 1000),
+  };
+  for (const s of SECTIONS) for (const q of s.questions) {
+    if (q.type === "info") continue;
+    const shown = visible(q);
+    if (q.type === "matrix") {
+      for (const r of q.rows) rec[r.id] = shown ? (answers[r.id] ? Number(answers[r.id]) : "") : "";
+      continue;
+    }
+    let v = shown ? answers[q.id] : undefined;
+    if (q.type === "multi") {
+      const arr = [].concat(v || []);
+      // každá možnost jako samostatný sloupec 0/1 – snadné pro statistiku
+      for (let i = 0; i < q.options.length; i++) rec[`${q.id}__${i + 1}`] = shown ? (arr.includes(q.options[i]) ? 1 : 0) : "";
+      if (q.other) rec[`${q.id}__jine`] = shown ? (arr.includes("__other") ? 1 : 0) : "";
+      rec[q.id] = arr.map(x => x === "__other" ? "Jiné" : x).join("; ");
+    } else if (q.type === "single") {
+      rec[q.id] = v === "__other" ? "Jiné" : (v || "");
+    } else if (q.type === "scale") {
+      rec[q.id] = v ? Number(v) : "";
+    } else {
+      rec[q.id] = v || "";
+    }
+    if (q.other) rec[q.id + "_jine"] = shown && [].concat(v || []).includes("__other") ? (answers[q.id + "_jine"] || "") : "";
+  }
+  return rec;
+}
+
+async function submit() {
+  const btn = document.getElementById("next");
+  const errBox = document.getElementById("submit-error");
+  btn.disabled = true; btn.textContent = "Odesílám…"; errBox.classList.add("hidden");
+  const record = buildRecord();
+
+  if (!CONFIG.ENDPOINT_URL) {
+    console.log("ZKUŠEBNÍ REŽIM – data, která by se odeslala:", record);
+    window.__lastRecord = record;
+    return done(true);
+  }
+
+  const body = JSON.stringify(record);
+  try {
+    // text/plain = „jednoduchý“ požadavek bez CORS preflightu, který Apps Script nepodporuje
+    const res = await fetch(CONFIG.ENDPOINT_URL, { method: "POST", body, headers: { "Content-Type": "text/plain;charset=utf-8" } });
+    const json = await res.json();
+    if (json.status === "ok" || json.status === "duplicate") return done();
+    if (json.status === "closed") { CONFIG.CLOSE_AT = "2000-01-01"; return render(); }
+    throw new Error(json.message || "Neznámá chyba");
+  } catch (err) {
+    console.warn("Standardní odeslání selhalo, zkouším záložní způsob:", err);
+    try {
+      // záložní cesta: odpověď nejde přečíst, ale data dorazí; duplicitu ohlídá server podle id
+      await fetch(CONFIG.ENDPOINT_URL, { method: "POST", mode: "no-cors", body, headers: { "Content-Type": "text/plain;charset=utf-8" } });
+      return done();
+    } catch (err2) {
+      btn.disabled = false; btn.textContent = "Odeslat znovu";
+      errBox.textContent = "Odpovědi se nepodařilo odeslat. Zkontrolujte připojení k internetu a zkuste to znovu – vyplněné odpovědi zůstávají zachované.";
+      errBox.classList.remove("hidden");
+    }
+  }
+}
+
+function done(demo) {
+  safeSet(STORAGE_KEY, "1");
+  step = SECTIONS.length;
+  app.innerHTML = `
+    <div class="progress"><div style="width:100%"></div></div>
+    <div class="card"><h2>Hotovo</h2><p>${esc(CONFIG.THANKS)}</p>
+    <div class="info-box">${SUPPORT_HTML}</div>
+    ${demo ? `<div class="notice error">Zkušební režim – nic nebylo uloženo. Odeslaná data najdete v konzoli prohlížeče.</div>` : ""}</div>`;
+  window.scrollTo(0, 0);
+}
+
+const SUBMISSION_ID = uuid();
+const START = Date.now();
+window.addEventListener("beforeunload", e => {
+  if (step >= 0 && step < SECTIONS.length && Object.keys(answers).length) { e.preventDefault(); e.returnValue = ""; }
+});
+render();
+</script>
+</body>
+</html>
